@@ -1,0 +1,327 @@
+﻿@page "/"
+@using NCalc;
+@using System.Text
+
+<PageTitle>Index</PageTitle>
+<p>可输入逻辑表达式，每行一个</p>
+
+<p>
+    <textarea class="custom-text" @bind="InputText" rows="5"></textarea>
+</p>
+
+<button class="btn-run" @onclick="Run">Run</button>
+
+<p class="custom-text">
+    @OutputText.renderedText()
+</p>
+
+<style>
+    .full-width-textbox {
+        width: 100%;
+        box-sizing: border-box;
+    }
+
+    .custom-text {
+        font-size: 16px;
+        font-weight: bold;
+        /* 其他字体样式属性 */
+    }
+</style>
+
+
+
+@code {
+    private string InputText { get; set; }
+    OutString OutputText { get; set; } = new OutString();
+
+    public class OutString
+    {
+        public string OutputText = "";
+
+        public OutString()
+        {
+
+        }
+        public void clear()
+        {
+            OutputText = "";
+        }
+        public void Write(string a)
+        {
+            OutputText += a;
+        }
+        public void WriteLine(string a = "")
+        {
+            OutputText += a + "\n";
+        }
+
+        public MarkupString renderedText()
+        {
+            return new MarkupString(OutputText.Replace("\n", "<br />"));
+        }
+    }
+    private void Run()
+    {
+        OutputText.clear();
+        List<string> Ys = InputText.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries).ToList();
+
+
+        var DistinctLetters = GetDistinctLetters(string.Join("", Ys)).OrderBy(c => c).ToList();
+        int VarCount = DistinctLetters.Count(); //变量总数
+        List<List<bool>> binaryValues = GenerateBinaryValues(VarCount); //构建所有可能情况
+        Dictionary<string, bool> letterDictionary = CreateLetterDictionary(DistinctLetters.ToList(), binaryValues); //构建字典
+
+        bool same = true;
+        // 打印结果
+
+        int count = 0;
+        foreach (string key in letterDictionary.Keys)
+        {
+            if (count >= VarCount) break;
+
+            OutputText.Write($"{key}\t");
+            count++;
+        }
+        OutputText.Write("| \t");
+        OutputText.WriteLine();
+
+        for (int i = 0; i < Ys.Count; i++)
+        {
+            Ys[i] = Ys[i].ToUpper().Replace(" ", "");
+            Ys[i] = TransformString1(ReverseNot(Ys[i]));
+        }
+
+        foreach (var binaryList in binaryValues)
+        {
+            var LetterValue = SetLetterDictionary(letterDictionary, binaryList);
+            List<string> Ys_Valued = new List<string>();
+
+
+            foreach (var Y in Ys)
+            {
+                string temp = Y;
+                foreach (var letter in LetterValue)
+                {
+                    temp = temp.Replace(letter.Key, letter.Value == true ? "1" : "0");
+                }
+                Ys_Valued.Add(temp);
+
+            }
+            foreach (var in_sig in binaryList)
+            {
+                OutputText.Write($"{(in_sig ? "1" : "0")}\t");
+            }
+            OutputText.Write("| \t");
+
+            List<bool> result = new List<bool>();
+            foreach (var y in Ys_Valued)
+            {
+                result.Add(EvaluateBooleanExpression(y));
+            }
+            if (result.GroupBy(r => r).Count() > 1)
+            {
+                same = false;
+            }
+            foreach (var r in result)
+            {
+                OutputText.Write(r ? "1\t" : "0\t");
+            }
+
+            OutputText.WriteLine();
+        }
+        OutputText.WriteLine(same ? "Same" : "Not same");
+    }
+
+    static List<List<bool>> GenerateBinaryValues(int n)
+    {
+        List<List<bool>> binaryValues = new List<List<bool>>();
+
+        // 计算总的可能值数目
+        int totalValues = (int)Math.Pow(2, n);
+
+        // 生成所有可能值
+        for (int i = 0; i < totalValues; i++)
+        {
+            List<bool> binaryList = new List<bool>();
+            int value = i;
+
+            // 生成二进制表示，并保存到列表中
+            for (int j = 0; j < n; j++)
+            {
+                bool bit = (value & 1) == 1;
+                binaryList.Insert(0, bit); // 插入到列表的开头
+                value >>= 1;
+            }
+
+            binaryValues.Add(binaryList);
+        }
+
+        return binaryValues;
+    }
+
+    static Dictionary<string, bool> CreateLetterDictionary(List<char> UsedLetter, List<List<bool>> binaryValues)
+    {
+        Dictionary<string, bool> letterDictionary = new Dictionary<string, bool>();
+        //char currentLetter = 'a';
+
+        //foreach (List<bool> binaryList in binaryValues)
+        //{
+        //    string letter = currentLetter.ToString();
+        //    bool value = binaryList[0]; // 这里将每个字母与第一个二进制位对应
+
+        //    letterDictionary[letter] = value;
+
+        //    currentLetter++;
+        //    if (currentLetter > 'z')
+        //    {
+        //        break; // 停止生成字母和对应值
+        //    }
+        //}
+
+        foreach (char c in UsedLetter)
+        {
+            string letter = c.ToString();
+            letterDictionary[letter] = false;
+        }
+
+        return letterDictionary;
+    }
+
+    static IEnumerable<char> GetDistinctLetters(string inputString)
+    {
+        // 使用LINQ从字符串中提取字母并去重
+        IEnumerable<char> letters = inputString
+            .Where(char.IsLetter) // 过滤出字母
+            .Select(char.ToUpper) // 将字母转换为小写，以不区分大小写
+            .Distinct(); // 去重
+
+        return letters;
+    }
+
+    static bool EvaluateBooleanExpression(string expressiontext)
+    {
+        if (expressiontext == "0") return false;
+        if (expressiontext == "1") return true;
+        Expression expression = new Expression(expressiontext);
+
+        bool result = false;
+        try
+        {
+            result = (bool)expression.Evaluate();
+        }
+        catch
+        {
+            string debugtext = expression.Evaluate().ToString();
+            if (debugtext == "0") return false;
+            if (debugtext == "1") return true;
+
+        }
+
+        return result;
+    }
+
+    static Dictionary<string, bool> SetLetterDictionary(Dictionary<string, bool> letterDictionary, List<bool> binaryList)
+    {
+        int count = 0;
+        foreach (var kvp in letterDictionary)
+        {
+            if (count >= binaryList.Count()) break;
+            letterDictionary[kvp.Key] = binaryList[count];
+            count++;
+        }
+        return letterDictionary;
+    }
+
+    static string TransformString1(string input)
+    {
+        StringBuilder result = new StringBuilder();
+
+        for (int i = 0; i < input.Length; i++)
+        {
+            char currentChar = input[i];
+
+            if (i < input.Length - 1)
+            {
+                char nextChar = input[i + 1];
+                if (char.IsLetter(currentChar) && char.IsLetter(nextChar))
+                {
+                    result.Append(currentChar);
+                    result.Append("&&");
+                }
+                else if (char.IsLetter(currentChar) && (nextChar == '(' || nextChar == '!'))
+                {
+                    result.Append(currentChar);
+                    result.Append("&&");
+                }
+                else if ((currentChar == ')' || currentChar == '\'') && (char.IsLetter(nextChar) || nextChar == '!' || nextChar == '('))
+                {
+                    result.Append(currentChar);
+                    result.Append("&&");
+                }
+                else if (currentChar == '*')
+                {
+                    result.Append("&&");
+                }
+                else if (currentChar == '+')
+                {
+                    result.Append("||");
+                }
+                else
+                {
+                    result.Append(currentChar);
+                }
+            }
+            else
+            {
+                result.Append(currentChar);
+            }
+        }
+
+        return result.ToString();
+    }
+
+    static string ReverseNot(string input)
+    {
+        while (input.Contains("'"))
+        {
+            Dictionary<int, int> bracketPairs = FindBracketPairs(input);
+            int index = input.IndexOf("'");
+            if (input[index - 1] == ')')
+            {
+                input = input.Remove(index, 1);
+                input = input.Insert(bracketPairs[index - 1], "!");
+            }
+            else if (char.IsLetter(input[index - 1]))
+            {
+                input = input.Remove(index, 1);
+                input = input.Insert(index - 1, "!");
+            }
+        }
+        return input;
+    }
+
+
+    static Dictionary<int, int> FindBracketPairs(string input)
+    {
+        Stack<int> stack = new Stack<int>();
+        Dictionary<int, int> bracketPairs = new Dictionary<int, int>();
+
+        for (int i = 0; i < input.Length; i++)
+        {
+            if (input[i] == '(')
+            {
+                stack.Push(i);
+            }
+            else if (input[i] == ')' && stack.Count > 0)
+            {
+                int openBracketPosition = stack.Pop();
+                bracketPairs.Add(openBracketPosition, i);
+                bracketPairs.Add(i, openBracketPosition);
+            }
+            // 如果遇到其他字符，可以忽略或处理
+        }
+
+        return bracketPairs;
+    }
+
+}

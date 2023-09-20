@@ -1,0 +1,1 @@
+D:\桌面清理空间\程序实例\真值表\Truth_Table_Web\obj\Release\net6.0\browser-wasm\PubTmp\Out\web.config
